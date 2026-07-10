@@ -71,6 +71,21 @@ class CfWriteResult:
 
 
 @dataclass(frozen=True)
+class SpendingSummaryItem:
+    """支出内訳の1行(/cf/summary)。大項目合計(is_subtotal=True)と中項目が混在する。
+
+    large_category は所属する大項目名(合計行は自身)。ratio は割合の表示文字列(例 "12.3%")。
+    """
+
+    large_category: str
+    name: str
+    is_subtotal: bool
+    amount: str
+    amount_yen: int | None
+    ratio: str
+
+
+@dataclass(frozen=True)
 class MonthlySummaryRow:
     """月次収支リストの1行(収入合計・カテゴリ別・収支合計など)。
 

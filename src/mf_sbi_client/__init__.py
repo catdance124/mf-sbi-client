@@ -33,6 +33,7 @@ from .models import (
     MonthlySummaryRow,
     RefreshResult,
     ReportCategory,
+    SpendingSummaryItem,
     Transaction,
 )
 
@@ -65,6 +66,7 @@ __all__ = [
     "RefreshError",
     "RefreshResult",
     "ReportCategory",
+    "SpendingSummaryItem",
     "Transaction",
     "open_client",
 ]

@@ -17,7 +17,13 @@ from bs4.element import Tag
 
 from ..errors import CfError
 from ..logging_setup import audit
-from ..models import Category, CfWriteResult, MonthlySummaryRow, Transaction
+from ..models import (
+    Category,
+    CfWriteResult,
+    MonthlySummaryRow,
+    SpendingSummaryItem,
+    Transaction,
+)
 from ._core import ClientCore
 from ._shared import parse_cf_detail_table, parse_period_label, parse_yen
 
@@ -26,6 +32,7 @@ logger = logging.getLogger("mf_sbi_client")
 CF_URL = "/cf"
 CF_FETCH_URL = "/cf/fetch"
 CF_MONTHLY_URL = "/cf/monthly"
+CF_SUMMARY_URL = "/cf/summary"
 CF_CREATE_URL = "/cf/create"
 CF_UPDATE_URL = "/cf/update"
 
@@ -111,6 +118,52 @@ class CfMixin(ClientCore):
             )
         if not result:
             raise CfError("収支リストの行を解析できません。仕様変更の可能性があります")
+        return result
+
+    def list_spending_summary(self, month: date | None = None) -> list[SpendingSummaryItem]:
+        """支出内訳(カテゴリ別の金額と割合)を取得する(/cf/summary)。
+
+        month 未指定なら表示中の期間。指定時は締め日起点でその月の期間に切り替える。
+        """
+        url = CF_SUMMARY_URL
+        if month is not None:
+            soup = BeautifulSoup(self._authed_get(CF_URL).text, "html.parser")
+            start_day = self._read_start_day(soup)
+            url = f"{CF_SUMMARY_URL}?from={month.year}/{month.month}/{start_day}"
+        page = self._authed_get(url)
+        soup = BeautifulSoup(page.text, "html.parser")
+        table = soup.select_one("#table-outgo")
+        if table is None:
+            raise CfError(
+                "支出内訳のテーブルが見つかりません。未ログインまたは仕様変更の可能性があります"
+            )
+        result: list[SpendingSummaryItem] = []
+        current_large = ""
+        for tr in table.select("tr"):
+            cells = tr.find_all(["td", "th"])
+            if len(cells) < 3:
+                continue
+            name = cells[0].get_text(strip=True)
+            amount = cells[1].get_text(strip=True)
+            ratio = cells[2].get_text(strip=True)
+            if not name or name == "項目":  # ヘッダ行
+                continue
+            is_subtotal = "sum" in (tr.get("class") or [])
+            if is_subtotal:
+                current_large = name.removesuffix("合計").strip()
+                name = current_large
+            result.append(
+                SpendingSummaryItem(
+                    large_category=current_large,
+                    name=name,
+                    is_subtotal=is_subtotal,
+                    amount=amount,
+                    amount_yen=parse_yen(amount),
+                    ratio=ratio,
+                )
+            )
+        if not result:
+            raise CfError("支出内訳の行を解析できません。仕様変更の可能性があります")
         return result
 
     def list_categories(self) -> dict[str, list[Category]]:

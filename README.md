@@ -22,6 +22,7 @@ uv run mf-sbi transactions               # 当月の入出金明細
 uv run mf-sbi transactions --month 2026-05
 uv run mf-sbi transactions --from 2026-04 --to 2026-06 --json
 uv run mf-sbi monthly                    # 月次収支リスト(カテゴリ別 × 月別、--json 可)
+uv run mf-sbi summary                    # 支出内訳(カテゴリ別の金額と割合、--month / --json 可)
 uv run mf-sbi report                     # 月次レポート(最新月。--month 2026-05 / --json 可)
 uv run mf-sbi diagnosis                  # 家計診断(理想の家計との比較、--month / --json 可)
 uv run mf-sbi assets                     # 資産クラスごとの内訳
