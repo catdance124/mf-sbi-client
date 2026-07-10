@@ -18,6 +18,49 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run)
 
+    d = subparsers.add_parser("diagnosis", help="家計診断を表示する(既定: 最新月)")
+    d.add_argument("--month", help="対象月 YYYY-MM")
+    d.add_argument("--json", action="store_true", help="JSON で出力する")
+    d.set_defaults(handler=_run_diagnosis)
+
+
+def _run_diagnosis(args: argparse.Namespace, config: Config) -> int:
+    with open_client(config) as client:
+        client.ensure_login()
+        if args.month:
+            month = parse_month(args.month)
+            diagnosis = client.get_diagnosis(month.year, month.month)
+        else:
+            diagnosis = client.get_diagnosis()
+
+    if args.json:
+        print(json.dumps(dataclasses.asdict(diagnosis), ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"# {diagnosis.year}/{diagnosis.month:02d} 家計診断")
+    if not diagnosis.available:
+        print("(属性情報が未設定のため理想値は算出されていません)")
+    balance = (
+        f"実際 {_yen(diagnosis.balance_actual_yen)} / 理想 {_yen(diagnosis.balance_ideal_yen)}"
+    )
+    expense = (
+        f"実際 {_yen(diagnosis.expense_actual_yen)} / 理想 {_yen(diagnosis.expense_ideal_yen)}"
+    )
+    print(f"収支: {balance}")
+    print(f"支出: {expense}")
+    print()
+    print(
+        format_table(
+            ["項目", "実際", "理想"],
+            [[c.name, _yen(c.actual_yen), _yen(c.ideal_yen)] for c in diagnosis.categories],
+        )
+    )
+    return 0
+
+
+def _yen(v: int | None) -> str:
+    return "-" if v is None else f"{v:,}円"
+
 
 def _run(args: argparse.Namespace, config: Config) -> int:
     with open_client(config) as client:
