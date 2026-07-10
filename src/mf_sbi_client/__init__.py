@@ -5,7 +5,7 @@
 
 from importlib.metadata import version
 
-from ._domains._core import BASE_URL, ID_BASE_URL, USER_AGENT
+from ._domains._core import BASE_URL, USER_AGENT
 from .config import Config
 from .errors import (
     AccountsError,
@@ -31,7 +31,6 @@ __version__ = version("mf-sbi-client")
 
 __all__ = [
     "BASE_URL",
-    "ID_BASE_URL",
     "USER_AGENT",
     "Account",
     "AccountsError",

@@ -11,9 +11,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Account:
-    """連携口座。"""
+    """連携口座。手元の現金など手動口座は account_id を持たない(更新非対象)。"""
 
-    account_id: str
+    account_id: str | None
     name: str
     balance: str
     balance_yen: int | None
@@ -48,12 +48,13 @@ class AssetClass:
 
 @dataclass(frozen=True)
 class AssetHistoryPoint:
-    """資産推移の1点。"""
+    """資産推移の1点。日次(直近)と月次(月末)が混在する。"""
 
     date: str
     total: str
     total_yen: int | None
     breakdown: dict[str, str]
+    is_monthly: bool
 
 
 @dataclass(frozen=True)

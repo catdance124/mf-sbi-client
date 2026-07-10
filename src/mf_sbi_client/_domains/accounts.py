@@ -1,9 +1,160 @@
-"""口座一覧・残高と連携口座の更新実行。エンドポイントは docs/specs/accounts/ を参照。"""
+"""口座一覧・残高と連携口座の更新実行。
+
+観測結果: docs/specs/accounts/list.md, docs/specs/accounts/refresh.md
+"""
 
 from __future__ import annotations
 
+import logging
+import re
+import time
+
+from bs4 import BeautifulSoup
+
+from ..errors import AccountsError, RefreshError
+from ..logging_setup import audit
+from ..models import Account, RefreshResult
 from ._core import ClientCore
+from ._shared import parse_yen, resolve_columns
+
+logger = logging.getLogger("mf_sbi_client")
+
+ACCOUNTS_URL = "/accounts"
+REFRESH_URL = "/faggregation_queue2"
+
+_REFRESH_FORM_RE = re.compile(r"^/faggregation_queue2/(.+)$")
+_REFRESHING_MARKERS = ("更新中", "取得中")
 
 
 class AccountsMixin(ClientCore):
-    """口座関連の操作(観測フェーズ完了後に実装)。"""
+    """口座一覧の取得と更新実行。"""
+
+    def list_accounts(self) -> list[Account]:
+        """連携口座の一覧と残高を取得する。"""
+        res = self._authed_get(ACCOUNTS_URL)
+        soup = BeautifulSoup(res.text, "html.parser")
+        table = soup.select_one("table.table-striped")
+        if table is None:
+            raise AccountsError(
+                "口座一覧テーブルが見つかりません。未ログインまたは仕様変更の可能性があります"
+            )
+        # thead/tbody を持たないテーブルのため、th を含む行をヘッダ行とみなす。
+        # ヘッダ文言は空白が混ざることがあるので除去して比較する
+        headers = [re.sub(r"\s+", "", th.get_text(strip=True)) for th in table.find_all("th")]
+        cols = resolve_columns(
+            headers,
+            {
+                "name": "金融機関",
+                "balance": "資産",
+                "last_updated": "登録日（最終取得日）",
+                "status": "更新状態",
+            },
+        )
+        if "name" not in cols or "balance" not in cols:
+            raise AccountsError(
+                f"口座一覧のヘッダを解決できません(検出: {headers})。仕様変更の可能性があります"
+            )
+        accounts: list[Account] = []
+        for tr in table.find_all("tr"):
+            tds = tr.find_all("td", recursive=False)
+            if len(tds) < len(cols):
+                continue
+
+            def cell(key: str, tds: list = tds) -> str:  # type: ignore[type-arg]
+                idx = cols.get(key)
+                return tds[idx].get_text(" ", strip=True) if idx is not None else ""
+
+            # account_id_hash は行内の更新フォームの action から取る(手動口座にはない)
+            account_id: str | None = None
+            form = tr.select_one('form[action^="/faggregation_queue2/"]')
+            if form is not None:
+                m = _REFRESH_FORM_RE.match(str(form.get("action", "")))
+                if m:
+                    account_id = m.group(1)
+            balance = cell("balance")
+            accounts.append(
+                Account(
+                    account_id=account_id,
+                    name=cell("name"),
+                    balance=balance,
+                    balance_yen=parse_yen(balance),
+                    last_updated=cell("last_updated"),
+                    status=cell("status") or None,
+                )
+            )
+        return accounts
+
+    def refresh_accounts(
+        self, *, account_id: str | None = None, dry_run: bool = True
+    ) -> RefreshResult:
+        """連携口座の更新(再集計)を実行する。account_id 未指定なら一括更新。
+
+        破壊的相当の操作のため dry-run が既定。実行時も dry-run 時も監査ログに記録する。
+        """
+        url = f"{REFRESH_URL}/{account_id}" if account_id else REFRESH_URL
+        target = account_id or "(全口座)"
+        if dry_run:
+            audit("口座更新", dry_run=True, result="skipped", target=target, url=url)
+            logger.info("dry-run: POST %s は実行しません", url)
+            return RefreshResult(
+                requested=False, dry_run=True, account_id=account_id, detail=f"dry-run: {url}"
+            )
+        page = self._authed_get(ACCOUNTS_URL)
+        token = self._csrf_token(BeautifulSoup(page.text, "html.parser"))
+        res = self._authed_post(
+            url,
+            headers={"X-CSRF-Token": token, "Referer": f"{self._http.base_url}{ACCOUNTS_URL}"},
+        )
+        ok = res.status_code in (200, 302)
+        audit(
+            "口座更新",
+            dry_run=False,
+            result="accepted" if ok else f"failed({res.status_code})",
+            target=target,
+            url=url,
+        )
+        if not ok:
+            raise RefreshError(f"更新リクエストが拒否されました(HTTP {res.status_code}): {url}")
+        return RefreshResult(
+            requested=True, dry_run=False, account_id=account_id, detail=f"accepted: {url}"
+        )
+
+    def wait_refresh(
+        self,
+        *,
+        account_id: str | None = None,
+        interval: float = 5.0,
+        timeout: float = 180.0,
+    ) -> list[Account]:
+        """更新中の口座がなくなるまでポーリングし、最終的な口座一覧を返す。
+
+        account_id 指定時はその口座のみ監視する(他口座の定時集計に巻き込まれないため)。
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            accounts = self.list_accounts()
+            if account_id:
+                watched = [a for a in accounts if a.account_id == account_id]
+                # 更新中は行から更新フォームが消え account_id を特定できなくなるため、
+                # 見つからない場合は「まだ更新中」とみなす
+                refreshing = (
+                    [f"account_id={account_id}(更新中)"]
+                    if not watched
+                    else [
+                        a.name
+                        for a in watched
+                        if a.status and any(m in a.status for m in _REFRESHING_MARKERS)
+                    ]
+                )
+            else:
+                refreshing = [
+                    a.name
+                    for a in accounts
+                    if a.status and any(m in a.status for m in _REFRESHING_MARKERS)
+                ]
+            if not refreshing:
+                return accounts
+            if time.monotonic() >= deadline:
+                raise RefreshError(f"更新が {timeout} 秒以内に完了しませんでした: {refreshing}")
+            logger.info("更新待ち: %s", ", ".join(refreshing))
+            time.sleep(interval)
