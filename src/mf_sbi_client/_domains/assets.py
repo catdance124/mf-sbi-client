@@ -5,7 +5,11 @@
 
 from __future__ import annotations
 
+import calendar
+import csv
+import io
 import re
+from datetime import date
 
 from bs4 import BeautifulSoup
 
@@ -16,8 +20,15 @@ from ._shared import parse_yen
 
 PORTFOLIO_URL = "/bs/portfolio"
 HISTORY_URL = "/bs/history"
+HISTORY_CSV_URL = "/bs/history/csv"
+# 月次詳細(その月の日次データ)。日付はその月の月末日
+MONTHLY_HISTORY_CSV_URL = "/bs/history/list/{month_end:%Y-%m-%d}/monthly/csv"
+
+# CSV の実体は cp932(content-type の charset=utf-8 は誤り。spec 参照)
+_CSV_ENCODING = "cp932"
 
 _TOTAL_RE = re.compile(r"合計：\s*([0-9,]+円)")
+_YEN_SUFFIX_RE = re.compile(r"（円）$")
 
 
 class AssetsMixin(ClientCore):
@@ -82,4 +93,52 @@ class AssetsMixin(ClientCore):
             )
         if not result:
             raise AssetsError("資産推移の行を解析できません。仕様変更の可能性があります")
+        return result
+
+    def get_asset_history_csv(self) -> str:
+        """資産推移サマリ(日次: 直近約10日 + 月次: 約12ヶ月)の CSV テキストを取得する。"""
+        return self._fetch_csv(HISTORY_CSV_URL)
+
+    def get_monthly_asset_history_csv(self, month: date) -> str:
+        """指定月の日次資産推移の CSV テキストを取得する(データなし月はヘッダのみ)。"""
+        month_end = date(month.year, month.month, calendar.monthrange(month.year, month.month)[1])
+        return self._fetch_csv(MONTHLY_HISTORY_CSV_URL.format(month_end=month_end))
+
+    def get_monthly_asset_history(self, month: date) -> list[AssetHistoryPoint]:
+        """指定月の日次資産推移を取得する(CSV を解析。データなし月は空リスト)。"""
+        return self._parse_history_csv(self.get_monthly_asset_history_csv(month), is_monthly=False)
+
+    def _fetch_csv(self, url: str) -> str:
+        res = self._authed_get(url, headers={"Referer": f"{self._http.base_url}{HISTORY_URL}"})
+        content_type = res.headers.get("content-type", "")
+        if "csv" not in content_type:
+            raise AssetsError(
+                f"CSV を取得できません(content-type: {content_type})。"
+                "未ログインまたは仕様変更の可能性があります"
+            )
+        return res.content.decode(_CSV_ENCODING)
+
+    def _parse_history_csv(self, text: str, *, is_monthly: bool) -> list[AssetHistoryPoint]:
+        reader = csv.reader(io.StringIO(text))
+        rows = list(reader)
+        if not rows:
+            raise AssetsError("CSV が空です。仕様変更の可能性があります")
+        headers = rows[0]
+        if not headers or headers[0] != "日付":
+            raise AssetsError(f"CSV ヘッダを解決できません(検出: {headers})")
+        # ヘッダ例: 日付, 合計（円）, 預金・現金（円）, ポイント（円）
+        class_names = [_YEN_SUFFIX_RE.sub("", h) for h in headers[2:]]
+        result: list[AssetHistoryPoint] = []
+        for row in rows[1:]:
+            if len(row) < 2:
+                continue
+            result.append(
+                AssetHistoryPoint(
+                    date=row[0],
+                    total=row[1],
+                    total_yen=parse_yen(row[1]),
+                    breakdown=dict(zip(class_names, row[2:], strict=False)),
+                    is_monthly=is_monthly,
+                )
+            )
         return result

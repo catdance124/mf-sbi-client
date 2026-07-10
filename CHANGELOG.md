@@ -1,5 +1,12 @@
 # Changelog
 
+## 未リリース
+
+- `asset-history --month YYYY-MM`: 指定月の日次資産推移(全日分)を CSV エンドポイントから取得
+- `asset-history --csv PATH`: サービスの CSV(cp932)を UTF-8 に変換して保存(`-` で標準出力)
+- ライブラリ API 追加: `get_monthly_asset_history()` / `get_asset_history_csv()` /
+  `get_monthly_asset_history_csv()`
+
 ## v0.1.0 (2026-07-10)
 
 初回リリース。

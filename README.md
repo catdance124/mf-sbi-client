@@ -21,7 +21,10 @@ uv run mf-sbi transactions               # 当月の入出金明細
 uv run mf-sbi transactions --month 2026-05
 uv run mf-sbi transactions --from 2026-04 --to 2026-06 --json
 uv run mf-sbi assets                     # 資産クラスごとの内訳
-uv run mf-sbi asset-history              # 資産推移(日次+月次)
+uv run mf-sbi asset-history              # 資産推移サマリ(直近日次+月次)
+uv run mf-sbi asset-history --month 2026-06        # 指定月の日次全日分
+uv run mf-sbi asset-history --csv 推移.csv          # CSV 保存(UTF-8 変換、- で標準出力)
+uv run mf-sbi asset-history --month 2026-06 --csv - # 指定月の日次 CSV
 uv run mf-sbi refresh                    # 一括更新の dry-run(既定)
 uv run mf-sbi refresh --execute          # 一括更新を実行
 uv run mf-sbi refresh --account-id <ID> --execute --wait   # 口座別更新+完了待ち
@@ -67,5 +70,6 @@ with open_client(Config.from_env()) as client:
 
 ## 制約
 
-- `/cf/csv` などの CSV/Excel エクスポートはプレミアム限定のため使用せず、HTML を解析します
-- 資産推移はサービスが表示する範囲(日次: 直近約10日、月次: 過去約12ヶ月)に限られます
+- 入出金明細の `/cf/csv` エクスポートはプレミアム限定のため使用せず、HTML を解析します
+- 資産推移の CSV はプレミアム制限なし。サマリは日次直近約10日+月次約12ヶ月、
+  `--month` 指定でデータ登録以降の任意の月の日次全日分が取得できます
