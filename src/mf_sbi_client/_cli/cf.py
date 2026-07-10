@@ -1,4 +1,4 @@
-"""入出金明細コマンド: transactions。"""
+"""入出金明細コマンド: transactions、monthly。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,28 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p.add_argument("--to", help="終了月 YYYY-MM(--from と併用)")
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run)
+
+    m = subparsers.add_parser("monthly", help="月次収支リスト(カテゴリ別 × 月別)を表示する")
+    m.add_argument("--json", action="store_true", help="JSON で出力する")
+    m.set_defaults(handler=_run_monthly)
+
+
+def _run_monthly(args: argparse.Namespace, config: Config) -> int:
+    with open_client(config) as client:
+        client.ensure_login()
+        rows = client.list_monthly_summary()
+
+    if args.json:
+        print(json.dumps([dataclasses.asdict(r) for r in rows], ensure_ascii=False, indent=2))
+        return 0
+    periods = list(rows[0].amounts) if rows else []
+    print(
+        format_table(
+            ["項目", *periods],
+            [[r.label, *(r.amounts[p] for p in periods)] for r in rows],
+        )
+    )
+    return 0
 
 
 def _run(args: argparse.Namespace, config: Config) -> int:

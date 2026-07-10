@@ -23,6 +23,7 @@ from .models import (
     Account,
     AssetClass,
     AssetHistoryPoint,
+    MonthlySummaryRow,
     RefreshResult,
     Transaction,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "LoginError",
     "MfSbiClient",
     "MfSbiError",
+    "MonthlySummaryRow",
     "NotAuthenticatedError",
     "ParseError",
     "RefreshError",
