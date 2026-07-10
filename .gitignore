@@ -1,0 +1,17 @@
+# 資格情報・セッション
+.env
+.session/
+
+# ログ
+logs/
+
+# 開発時観測物
+.playwright-mcp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+dist/
