@@ -1,4 +1,4 @@
-"""口座関連コマンド: accounts / refresh。"""
+"""口座関連コマンド: accounts / account / refresh。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p = subparsers.add_parser("accounts", help="連携口座の一覧と残高を表示する")
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run_accounts)
+
+    d = subparsers.add_parser("account", help="口座別詳細(サマリ・内訳・明細)を表示する")
+    d.add_argument("account_id", help="対象の account_id(accounts コマンドで確認)")
+    d.add_argument("--json", action="store_true", help="JSON で出力する")
+    d.set_defaults(handler=_run_account_detail)
 
     r = subparsers.add_parser(
         "refresh",
@@ -41,6 +46,49 @@ def _run_accounts(args: argparse.Namespace, config: Config) -> int:
                 [
                     [a.name, a.balance, a.last_updated, a.status or "", a.account_id or "-"]
                     for a in accounts
+                ],
+            )
+        )
+    return 0
+
+
+def _run_account_detail(args: argparse.Namespace, config: Config) -> int:
+    with open_client(config) as client:
+        client.ensure_login()
+        detail = client.get_account_detail(args.account_id)
+
+    if args.json:
+        print(json.dumps(dataclasses.asdict(detail), ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"# {detail.name}")
+    for key, value in detail.summary.items():
+        print(f"{key}: {value}")
+    if detail.sub_accounts:
+        headers = list(detail.sub_accounts[0])
+        print("\n## サブ口座")
+        print(format_table(headers, [[r.get(h, "") for h in headers] for r in detail.sub_accounts]))
+    for class_name, rows in detail.breakdown.items():
+        if not rows:
+            continue
+        headers = list(rows[0])
+        print(f"\n## {class_name}")
+        print(format_table(headers, [[r.get(h, "") for h in headers] for r in rows]))
+    if detail.transactions:
+        print("\n## 明細(表示中期間)")
+        print(
+            format_table(
+                ["日付", "内容", "金額", "大項目", "中項目", "振替"],
+                [
+                    [
+                        t.date_iso or t.date,
+                        t.content[:24],
+                        t.amount,
+                        t.category_large or "",
+                        t.category_middle or "",
+                        "振替" if t.is_transfer else "",
+                    ]
+                    for t in detail.transactions
                 ],
             )
         )
