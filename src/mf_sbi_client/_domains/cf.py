@@ -1,6 +1,6 @@
-"""入出金明細(家計簿)。
+"""入出金明細(家計簿)と月次収支リスト。
 
-観測結果: docs/specs/cf/transactions.md
+観測結果: docs/specs/cf/transactions.md、docs/specs/cf/monthly.md
 CSV/Excel エクスポートはプレミアム限定のため、HTML テーブル解析を一次手段とする。
 """
 
@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 from ..errors import CfError
-from ..models import Transaction
+from ..models import MonthlySummaryRow, Transaction
 from ._core import ClientCore
 from ._shared import parse_yen
 
@@ -23,6 +23,7 @@ logger = logging.getLogger("mf_sbi_client")
 
 CF_URL = "/cf"
 CF_FETCH_URL = "/cf/fetch"
+CF_MONTHLY_URL = "/cf/monthly"
 
 _RANGE_RE = re.compile(r"(\d{4})/(\d{2})/(\d{2})\s*-\s*(\d{4})/(\d{2})/(\d{2})")
 _DATE_RE = re.compile(r"(\d{2})/(\d{2})")
@@ -62,6 +63,53 @@ class CfMixin(ClientCore):
         while (y, m) <= (end.year, end.month):
             yield from self.list_transactions(date(y, m, 1))
             y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+
+    def list_monthly_summary(self) -> list[MonthlySummaryRow]:
+        """月次収支リスト(カテゴリ別 × 月別の収入・支出・収支)を取得する。
+
+        期間はサービス側の表示(直近6ヶ月)に従う。
+        """
+        page = self._authed_get(CF_MONTHLY_URL)
+        soup = BeautifulSoup(page.text, "html.parser")
+        table = soup.select_one("table#monthly_list")
+        if table is None:
+            raise CfError(
+                "収支リストのテーブルが見つかりません。未ログインまたは仕様変更の可能性があります"
+            )
+        # ヘッダ行: 先頭の空 th が閉じられておらず期間 th が入れ子になるため、葉の th のみ拾う
+        periods = [
+            th.get_text(strip=True)
+            for th in table.find_all("th")
+            if isinstance(th, Tag) and th.find("th") is None and th.get_text(strip=True)
+        ]
+        if not periods:
+            raise CfError("収支リストの期間ヘッダを解析できません。仕様変更の可能性があります")
+        result: list[MonthlySummaryRow] = []
+        for tr in table.find_all("tr"):
+            if not isinstance(tr, Tag):
+                continue
+            label_td = tr.select_one("td.title, td.item")
+            if label_td is None:
+                continue
+            numbers = [td.get_text(strip=True) for td in tr.select("td.number")]
+            if len(numbers) != len(periods):
+                raise CfError(
+                    f"収支リストの列数が不一致です(期間 {len(periods)} 列に対し"
+                    f"金額 {len(numbers)} 列)。仕様変更の可能性があります"
+                )
+            kind = " ".join(tr.get("class") or [])
+            amounts = dict(zip(periods, numbers, strict=True))
+            result.append(
+                MonthlySummaryRow(
+                    label=label_td.get_text(strip=True),
+                    kind=kind,
+                    amounts=amounts,
+                    amounts_yen={k: parse_yen(v) for k, v in amounts.items()},
+                )
+            )
+        if not result:
+            raise CfError("収支リストの行を解析できません。仕様変更の可能性があります")
+        return result
 
     def _read_start_day(self, soup: BeautifulSoup) -> int:
         """月選択リンクの data-from から締め日起点の開始「日」を読む。"""

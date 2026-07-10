@@ -20,6 +20,7 @@ uv run mf-sbi accounts                   # 連携口座の一覧・残高(--json
 uv run mf-sbi transactions               # 当月の入出金明細
 uv run mf-sbi transactions --month 2026-05
 uv run mf-sbi transactions --from 2026-04 --to 2026-06 --json
+uv run mf-sbi monthly                    # 月次収支リスト(カテゴリ別 × 月別、--json 可)
 uv run mf-sbi assets                     # 資産クラスごとの内訳
 uv run mf-sbi asset-history              # 資産推移サマリ(直近日次+月次)
 uv run mf-sbi asset-history --month 2026-06        # 指定月の日次全日分
