@@ -147,17 +147,16 @@ class AccountsMixin(ClientCore):
             rows.append(dict(zip(headers, aligned, strict=True)))
         return rows
 
-    def refresh_accounts(
-        self, *, account_id: str | None = None, dry_run: bool = True
-    ) -> RefreshResult:
-        """連携口座の更新(再集計)を実行する。account_id 未指定なら一括更新。
+    def refresh_account(self, account_id: str, *, dry_run: bool = True) -> RefreshResult:
+        """指定口座を口座別更新(再集計)する(`POST /faggregation_queue2/<id>`)。
 
-        破壊的相当の操作のため dry-run が既定。実行時も dry-run 時も監査ログに記録する。
+        無料プランで実際に集計が走る更新手段。破壊的相当のため dry-run 既定 + 監査ログ。
+        一括更新エンドポイント(id なし)は無料プランでは受理されるだけで実処理されないため、
+        全口座を更新したい場合は refresh_all_accounts(この口座別更新のループ)を使う。
         """
-        url = f"{REFRESH_URL}/{account_id}" if account_id else REFRESH_URL
-        target = account_id or "(全口座)"
+        url = f"{REFRESH_URL}/{account_id}"
         if dry_run:
-            audit("口座更新", dry_run=True, result="skipped", target=target, url=url)
+            audit("口座更新", dry_run=True, result="skipped", target=account_id, url=url)
             logger.info("dry-run: POST %s は実行しません", url)
             return RefreshResult(
                 requested=False, dry_run=True, account_id=account_id, detail=f"dry-run: {url}"
@@ -173,7 +172,7 @@ class AccountsMixin(ClientCore):
             "口座更新",
             dry_run=False,
             result="accepted" if ok else f"failed({res.status_code})",
-            target=target,
+            target=account_id,
             url=url,
         )
         if not ok:
@@ -181,6 +180,20 @@ class AccountsMixin(ClientCore):
         return RefreshResult(
             requested=True, dry_run=False, account_id=account_id, detail=f"accepted: {url}"
         )
+
+    def refresh_all_accounts(self, *, dry_run: bool = True) -> list[RefreshResult]:
+        """更新対象の全連携口座を口座別更新でループ実行する。
+
+        一括更新(id なし)は無料プランでは実処理されないため、口座別更新を順に投げる。
+        更新フォームを持たない手動口座・設定エラー口座(account_id なし)は対象外。
+        """
+        accounts = self.list_accounts()
+        targets = [a for a in accounts if a.account_id]
+        if not targets:
+            logger.info("更新対象の連携口座がありません")
+        return [
+            self.refresh_account(a.account_id, dry_run=dry_run) for a in targets if a.account_id
+        ]
 
     def wait_refresh(
         self,

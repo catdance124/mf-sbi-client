@@ -25,7 +25,10 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         "refresh",
         help="連携口座の更新(再集計)を実行する。既定は dry-run、実行は --execute",
     )
-    r.add_argument("--account-id", help="口座別更新の対象 account_id(未指定なら一括更新)")
+    r.add_argument(
+        "--account-id",
+        help="対象 account_id(未指定なら全連携口座を口座別更新でループ)",
+    )
     r.add_argument("--execute", action="store_true", help="実際に更新を実行する")
     r.add_argument("--wait", action="store_true", help="更新完了までポーリングして待つ")
     r.add_argument("--interval", type=float, default=5.0, help="ポーリング間隔秒(既定 5)")
@@ -99,9 +102,14 @@ def _run_refresh(args: argparse.Namespace, config: Config) -> int:
     dry_run = not args.execute or args.dry_run
     with open_client(config) as client:
         client.ensure_login()
-        result = client.refresh_accounts(account_id=args.account_id, dry_run=dry_run)
-        print(result.detail)
-        if args.wait and not result.dry_run:
+        if args.account_id:
+            results = [client.refresh_account(args.account_id, dry_run=dry_run)]
+        else:
+            # 一括更新は無料プランで実処理されないため、全口座を口座別更新でループする
+            results = client.refresh_all_accounts(dry_run=dry_run)
+        for result in results:
+            print(result.detail)
+        if args.wait and not dry_run:
             accounts = client.wait_refresh(
                 account_id=args.account_id, interval=args.interval, timeout=args.timeout
             )
