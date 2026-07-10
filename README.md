@@ -33,15 +33,17 @@ uv run mf-sbi categories                 # 家計簿カテゴリ一覧(ID 確認
 uv run mf-sbi add --amount 500 --content コーヒー --large-id 11 --middle-id 43 --execute
 uv run mf-sbi memo <transaction_id> "メモ" --execute   # 明細メモ更新
 uv run mf-sbi delete <transaction_id> --execute        # 手入力明細の削除
-uv run mf-sbi refresh                    # 一括更新の dry-run(既定)
-uv run mf-sbi refresh --execute          # 一括更新を実行
-uv run mf-sbi refresh --account-id <ID> --execute --wait   # 口座別更新+完了待ち
+uv run mf-sbi refresh                    # 全口座を口座別更新(dry-run 既定)
+uv run mf-sbi refresh --execute          # 全口座を口座別更新で実行
+uv run mf-sbi refresh --account-id <ID> --execute --wait   # 単一口座の更新+完了待ち
 ```
 
 - 「月」はサービス側のユーザー設定の締め日起点の期間です(例: 25日始まりなら
   `--month 2026-05` は 05/25〜06/24)。
 - `refresh` は金融機関への再集計を発生させるため dry-run が既定です。実行・dry-run とも
   `logs/audit-YYYY-MM.log` に監査記録が残ります。
+- 一括更新エンドポイント(id なし)は無料プランでは受理されるだけで実処理されないため、
+  `refresh` は全連携口座を**口座別更新でループ**します(無料プランで実際に反映される手段)。
 
 ## ライブラリとして使う
 
