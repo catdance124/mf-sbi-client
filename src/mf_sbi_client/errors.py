@@ -33,6 +33,10 @@ class CfError(MfSbiError):
     """入出金明細の取得失敗。"""
 
 
+class AnalysisError(MfSbiError):
+    """月次レポート(分析)の取得失敗。"""
+
+
 class AssetsError(MfSbiError):
     """資産推移・内訳の取得失敗。"""
 
