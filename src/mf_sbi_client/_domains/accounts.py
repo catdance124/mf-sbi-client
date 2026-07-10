@@ -1,6 +1,7 @@
-"""口座一覧・残高と連携口座の更新実行。
+"""口座一覧・残高・口座別詳細と連携口座の更新実行。
 
-観測結果: docs/specs/accounts/list.md, docs/specs/accounts/refresh.md
+観測結果: docs/specs/accounts/list.md, docs/specs/accounts/refresh.md,
+docs/specs/accounts/show.md
 """
 
 from __future__ import annotations
@@ -10,16 +11,18 @@ import re
 import time
 
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from ..errors import AccountsError, RefreshError
 from ..logging_setup import audit
-from ..models import Account, RefreshResult
+from ..models import Account, AccountDetail, RefreshResult
 from ._core import ClientCore
-from ._shared import parse_yen, resolve_columns
+from ._shared import parse_cf_detail_table, parse_period_label, parse_yen, resolve_columns
 
 logger = logging.getLogger("mf_sbi_client")
 
 ACCOUNTS_URL = "/accounts"
+ACCOUNT_SHOW_URL = "/accounts/show"
 REFRESH_URL = "/faggregation_queue2"
 
 _REFRESH_FORM_RE = re.compile(r"^/faggregation_queue2/(.+)$")
@@ -83,6 +86,66 @@ class AccountsMixin(ClientCore):
                 )
             )
         return accounts
+
+    def get_account_detail(self, account_id: str) -> AccountDetail:
+        """口座別詳細(サマリ・サブ口座・資産クラス別内訳・明細)を取得する。
+
+        明細はサービス側で表示中の期間のみ(期間切替は未対応)。
+        """
+        res = self._authed_get(f"{ACCOUNT_SHOW_URL}/{account_id}")
+        soup = BeautifulSoup(res.text, "html.parser")
+        form_sec = soup.select_one("section.accounts-form")
+        if form_sec is None:
+            raise AccountsError(
+                "口座詳細ページを解析できません。account_id の誤り、"
+                "未ログインまたは仕様変更の可能性があります"
+            )
+        title = form_sec.select_one("h1.show-title")
+        name = title.get_text(strip=True) if title else ""
+        # サマリ行(資産総額/負債総額/引き落とし予定額など)。入れ子の「合計」は内訳側で拾う
+        summary: dict[str, str] = {}
+        for h in form_sec.select("h1.heading-small"):
+            text = h.get_text(strip=True)
+            key, sep, value = text.partition("：")
+            if sep and not key.startswith("合計"):
+                summary[key] = value
+        sub_table = form_sec.select_one("table.table-bordered")
+        sub_accounts = self._parse_header_table(sub_table)
+        breakdown: dict[str, list[dict[str, str]]] = {}
+        for sec in soup.select("section.bs-detail"):
+            head = sec.find("h1")
+            class_name = head.get_text(strip=True) if head else ""
+            breakdown[class_name] = self._parse_header_table(sec.select_one("table"))
+        period = parse_period_label(soup)
+        transactions = parse_cf_detail_table(soup, *period) if period else None
+        return AccountDetail(
+            account_id=account_id,
+            name=name,
+            summary=summary,
+            sub_accounts=sub_accounts,
+            breakdown=breakdown,
+            transactions=transactions or [],
+        )
+
+    @staticmethod
+    def _parse_header_table(table: Tag | None) -> list[dict[str, str]]:
+        """ヘッダ行(th)と各行(td)を {ヘッダ文言: 値} に対応付ける。
+
+        行によってはヘッダ数より多いセルが入る(カードの行頭空セル等)ため右詰めで合わせる。
+        """
+        if table is None:
+            return []
+        headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
+        rows: list[dict[str, str]] = []
+        for tr in table.find_all("tr"):
+            if not isinstance(tr, Tag):
+                continue
+            tds = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
+            if not tds or len(tds) < len(headers):
+                continue
+            aligned = tds[len(tds) - len(headers) :]
+            rows.append(dict(zip(headers, aligned, strict=True)))
+        return rows
 
     def refresh_accounts(
         self, *, account_id: str | None = None, dry_run: bool = True

@@ -17,7 +17,7 @@ from bs4.element import Tag
 from ..errors import CfError
 from ..models import MonthlySummaryRow, Transaction
 from ._core import ClientCore
-from ._shared import parse_yen
+from ._shared import parse_cf_detail_table, parse_period_label, parse_yen
 
 logger = logging.getLogger("mf_sbi_client")
 
@@ -25,8 +25,6 @@ CF_URL = "/cf"
 CF_FETCH_URL = "/cf/fetch"
 CF_MONTHLY_URL = "/cf/monthly"
 
-_RANGE_RE = re.compile(r"(\d{4})/(\d{2})/(\d{2})\s*-\s*(\d{4})/(\d{2})/(\d{2})")
-_DATE_RE = re.compile(r"(\d{2})/(\d{2})")
 _FROM_DAY_RE = re.compile(r"\d{4}/\d{1,2}/(\d{1,2})")
 
 
@@ -122,74 +120,19 @@ class CfMixin(ClientCore):
         return 1
 
     def _parse_transactions(self, soup: BeautifulSoup, month: date) -> list[Transaction]:
-        label_el = soup.select_one(".fc-header-title h2")
-        label = label_el.get_text(strip=True) if label_el else ""
-        rng = _RANGE_RE.search(label)
-        if rng is None:
+        period = parse_period_label(soup)
+        if period is None:
             raise CfError(
-                f"表示期間ラベルを解析できません(検出: {label!r})。"
-                "未ログインまたは仕様変更の可能性があります"
+                "表示期間ラベルを解析できません。未ログインまたは仕様変更の可能性があります"
             )
-        start = date(int(rng.group(1)), int(rng.group(2)), int(rng.group(3)))
-        end = date(int(rng.group(4)), int(rng.group(5)), int(rng.group(6)))
+        start, end = period
         if (start.year, start.month) != (month.year, month.month):
             raise CfError(
-                f"要求月 {month:%Y-%m} に対し表示期間が {label} です。切替に失敗しています"
+                f"要求月 {month:%Y-%m} に対し表示期間が {start} - {end} です。切替に失敗しています"
             )
-
-        table = soup.select_one("#cf-detail-table")
-        if table is None:
+        result = parse_cf_detail_table(soup, start, end)
+        if result is None:
             raise CfError(
                 "明細テーブルが見つかりません。未ログインまたは仕様変更の可能性があります"
             )
-        result: list[Transaction] = []
-        for tr in table.select("tbody tr"):
-            date_td = tr.select_one("td.date")
-            amount_td = tr.select_one("td.amount")
-            content_td = tr.select_one("td.content")
-            if date_td is None or amount_td is None or content_td is None:
-                continue
-            date_text = date_td.get_text(strip=True)
-            amount_text = amount_td.get_text(" ", strip=True)
-            is_transfer = "mf-grayout" in (tr.get("class") or []) or "振替" in amount_text
-            # 保有金融機関: 通常行は td.note.calc、振替行は note なしの td.calc(2口座入り)
-            note_td = tr.select_one("td.note.calc")
-            if note_td is None:
-                calc_tds = [
-                    td
-                    for td in tr.select("td.calc")
-                    if "note" not in (td.get("class") or []) and td.get_text(strip=True)
-                ]
-                note_td = calc_tds[0] if calc_tds else None
-            lctg = tr.select_one("td.lctg")
-            mctg = tr.select_one("td.mctg")
-            amount_value = amount_text.replace("(振替)", "").strip()
-            result.append(
-                Transaction(
-                    date=date_text,
-                    date_iso=self._resolve_iso_date(date_text, start, end),
-                    content=content_td.get_text(" ", strip=True),
-                    amount=amount_text,
-                    amount_yen=parse_yen(amount_value),
-                    account=note_td.get_text(" ", strip=True) if note_td else "",
-                    category_large=(lctg.get_text(strip=True) or None) if lctg else None,
-                    category_middle=(mctg.get_text(strip=True) or None) if mctg else None,
-                    is_transfer=is_transfer,
-                )
-            )
         return result
-
-    def _resolve_iso_date(self, date_text: str, start: date, end: date) -> str | None:
-        """ "07/10(金)" を表示期間から年を補完して ISO 形式にする。"""
-        m = _DATE_RE.match(date_text)
-        if m is None:
-            return None
-        mm, dd = int(m.group(1)), int(m.group(2))
-        for year in {start.year, end.year}:
-            try:
-                d = date(year, mm, dd)
-            except ValueError:
-                continue
-            if start <= d <= end:
-                return d.isoformat()
-        return None

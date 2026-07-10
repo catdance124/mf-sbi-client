@@ -22,6 +22,21 @@ class Account:
 
 
 @dataclass(frozen=True)
+class AccountDetail:
+    """口座別詳細。summary は「資産総額」「引き落とし予定額」など種別依存のサマリ行。
+
+    sub_accounts / breakdown の各行は {ヘッダ文言: 値}(列構成が口座種別で異なるため)。
+    """
+
+    account_id: str
+    name: str
+    summary: dict[str, str]
+    sub_accounts: list[dict[str, str]]
+    breakdown: dict[str, list[dict[str, str]]]
+    transactions: list[Transaction]
+
+
+@dataclass(frozen=True)
 class Transaction:
     """入出金明細の1行。"""
 
