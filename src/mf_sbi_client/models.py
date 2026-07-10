@@ -136,6 +136,31 @@ class MonthlyReport:
 
 
 @dataclass(frozen=True)
+class DiagnosisCategory:
+    """家計診断の項目別比較(実際 vs 理想)。"""
+
+    name: str
+    actual_yen: int | None
+    ideal_yen: int | None
+    actual_percentage: int | None
+    ideal_percentage: int | None
+
+
+@dataclass(frozen=True)
+class Diagnosis:
+    """家計診断。属性情報未設定の場合 available=False で理想値は全て 0。"""
+
+    year: int
+    month: int
+    available: bool
+    balance_actual_yen: int | None
+    balance_ideal_yen: int | None
+    expense_actual_yen: int | None
+    expense_ideal_yen: int | None
+    categories: list[DiagnosisCategory]
+
+
+@dataclass(frozen=True)
 class RefreshResult:
     """連携口座の更新実行の結果。"""
 

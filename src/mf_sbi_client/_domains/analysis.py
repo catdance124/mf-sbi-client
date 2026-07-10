@@ -1,7 +1,7 @@
-"""月次レポート(分析)。
+"""月次レポート・家計診断(分析)。
 
-観測結果: docs/specs/analysis/monthly_report.md
-一次データ源はページ埋め込みの `window.PFMApp.Analysis.Reports` JSON。
+観測結果: docs/specs/analysis/monthly_report.md、docs/specs/analysis/diagnosis.md
+一次データ源はページ埋め込みの `window.PFMApp.Analysis.*` JSON。
 画面上プレミアム限定の内訳セクションも、この JSON には無課金で含まれる。
 """
 
@@ -14,15 +14,19 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from ..errors import AnalysisError
-from ..models import MonthlyReport, ReportCategory
+from ..models import Diagnosis, DiagnosisCategory, MonthlyReport, ReportCategory
 from ._core import ClientCore
 from ._shared import parse_yen
 
 MONTHLY_REPORT_URL = "/analysis/monthly_reports/{year}/{month}"
 MONTHLY_REPORT_LATEST_URL = "/analysis/monthly_reports/latest"
+DIAGNOSIS_URL = "/analysis/diagnoses/{year}/{month}"
+DIAGNOSIS_LATEST_URL = "/analysis/diagnoses/latest"
 
 _REPORTS_MARKER = "window.PFMApp.Analysis.Reports"
+_DIAGNOSES_MARKER = "window.PFMApp.Analysis.Diagnoses"
 _URL_YM_RE = re.compile(r"/analysis/monthly_reports/(\d{4})/(\d{1,2})")
+_DIAGNOSIS_URL_YM_RE = re.compile(r"/analysis/diagnoses/(\d{4})/(\d{1,2})")
 _TOP_KEY_RE = re.compile(r"([{,]\s*)([A-Za-z_]\w*)\s*:")
 _BALANCE_RE = re.compile(
     r"収入\s*(?P<income>[￥+\-0-9,]+).*支出\s*(?P<expense>[￥+\-0-9,]+)"
@@ -73,12 +77,66 @@ class AnalysisMixin(ClientCore):
             expense_breakdown=self._parse_categories(reports.get("outgoSummary", {})),
         )
 
+    def get_diagnosis(self, year: int | None = None, month: int | None = None) -> Diagnosis:
+        """家計診断を取得する。年月を省略すると最新月(latest)を返す。
+
+        属性情報(生年・家族構成)未設定の場合 available=False で理想値は全て 0。
+        """
+        if (year is None) != (month is None):
+            raise ValueError("year と month は両方指定するか両方省略してください")
+        url = (
+            DIAGNOSIS_LATEST_URL
+            if year is None or month is None
+            else DIAGNOSIS_URL.format(year=year, month=month)
+        )
+        res = self._authed_get(url)
+        m = _DIAGNOSIS_URL_YM_RE.search(str(res.url))
+        if m is None:
+            raise AnalysisError(
+                f"家計診断の URL を解決できません(最終 URL: {res.url})。"
+                "未ログインまたは仕様変更の可能性があります"
+            )
+        data = self._extract_embedded_json(res.text, _DIAGNOSES_MARKER, "家計診断")
+        comparison = data.get("ComparisonWithIdeal") or {}
+        balance = comparison.get("balance_of_payment") or {}
+        expense = comparison.get("expense") or {}
+        cat_cmp = data.get("CategoryComparison") or {}
+        names = [str(c.get("name", "")) for c in cat_cmp.get("categories") or []]
+        ideal = (cat_cmp.get("ideal") or {}).get("data") or []
+        actual = (cat_cmp.get("actual") or {}).get("data") or []
+        categories: list[DiagnosisCategory] = []
+        for i, name in enumerate(names):
+            a = actual[i] if i < len(actual) else {}
+            d = ideal[i] if i < len(ideal) else {}
+            categories.append(
+                DiagnosisCategory(
+                    name=name,
+                    actual_yen=self._to_int(a.get("amount")),
+                    ideal_yen=self._to_int(d.get("amount")),
+                    actual_percentage=self._to_int(a.get("percentage")),
+                    ideal_percentage=self._to_int(d.get("percentage")),
+                )
+            )
+        return Diagnosis(
+            year=int(m.group(1)),
+            month=int(m.group(2)),
+            available=bool(data.get("IsDiagnosisAvailable")),
+            balance_actual_yen=self._to_int(balance.get("actual")),
+            balance_ideal_yen=self._to_int(balance.get("ideal")),
+            expense_actual_yen=self._to_int(expense.get("actual")),
+            expense_ideal_yen=self._to_int(expense.get("ideal")),
+            categories=categories,
+        )
+
     def _extract_reports_json(self, html: str) -> dict[str, Any]:
-        """埋め込みの `window.PFMApp.Analysis.Reports = {...};` を辞書に変換する。"""
-        i = html.find(_REPORTS_MARKER)
+        return self._extract_embedded_json(html, _REPORTS_MARKER, "月次レポート")
+
+    def _extract_embedded_json(self, html: str, marker: str, label: str) -> dict[str, Any]:
+        """埋め込みの `window.PFMApp.Analysis.* = {...};` を辞書に変換する。"""
+        i = html.find(marker)
         if i < 0:
             raise AnalysisError(
-                "月次レポートの埋め込みデータが見つかりません。"
+                f"{label}の埋め込みデータが見つかりません。"
                 "未ログインまたは仕様変更の可能性があります"
             )
         start = html.find("{", i)
@@ -89,7 +147,7 @@ class AnalysisMixin(ClientCore):
             data: dict[str, Any] = json.loads(quoted)
         except json.JSONDecodeError as exc:
             raise AnalysisError(
-                "月次レポートの埋め込みデータを解析できません。仕様変更の可能性があります"
+                f"{label}の埋め込みデータを解析できません。仕様変更の可能性があります"
             ) from exc
         return data
 
