@@ -72,6 +72,36 @@ class AssetHistoryPoint:
 
 
 @dataclass(frozen=True)
+class ReportCategory:
+    """月次レポートのカテゴリ別集計。children は中項目(さらに下は空)。"""
+
+    name: str
+    amount_yen: int
+    compared_prev_yen: int | None
+    compared_prev_year_yen: int | None
+    children: list[ReportCategory]
+
+
+@dataclass(frozen=True)
+class MonthlyReport:
+    """月次レポート(分析)。金額の表示文字列は `￥719,041` 形式。"""
+
+    year: int
+    month: int
+    total_assets: str
+    total_assets_yen: int | None
+    total_assets_change: str
+    income: str
+    income_yen: int | None
+    expense: str
+    expense_yen: int | None
+    balance: str
+    balance_yen: int | None
+    income_breakdown: list[ReportCategory]
+    expense_breakdown: list[ReportCategory]
+
+
+@dataclass(frozen=True)
 class RefreshResult:
     """連携口座の更新実行の結果。"""
 

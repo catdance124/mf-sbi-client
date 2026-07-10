@@ -14,12 +14,13 @@ import httpx
 
 from ._domains._core import BASE_URL, COOKIES_PATH, USER_AGENT, ClientCore
 from ._domains.accounts import AccountsMixin
+from ._domains.analysis import AnalysisMixin
 from ._domains.assets import AssetsMixin
 from ._domains.cf import CfMixin
 from .config import Config
 
 
-class MfSbiClient(CfMixin, AccountsMixin, AssetsMixin, ClientCore):
+class MfSbiClient(CfMixin, AccountsMixin, AssetsMixin, AnalysisMixin, ClientCore):
     """マネーフォワード for 住信SBIネット銀行 の公開クライアント。"""
 
 
