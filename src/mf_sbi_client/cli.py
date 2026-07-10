@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from ._cli import auth
+from ._cli import accounts, assets, auth, cf
 from .config import Config
 from .errors import MfSbiError
 from .logging_setup import setup_logging
@@ -24,6 +24,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     auth.register(subparsers)
+    accounts.register(subparsers)
+    cf.register(subparsers)
+    assets.register(subparsers)
 
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
