@@ -24,6 +24,13 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     m.add_argument("--json", action="store_true", help="JSON で出力する")
     m.set_defaults(handler=_run_monthly)
 
+    s = subparsers.add_parser(
+        "summary", help="支出内訳(カテゴリ別の金額と割合)を表示する(既定: 表示中の期間)"
+    )
+    s.add_argument("--month", help="対象月 YYYY-MM(締め日起点の期間)")
+    s.add_argument("--json", action="store_true", help="JSON で出力する")
+    s.set_defaults(handler=_run_summary)
+
     c = subparsers.add_parser("categories", help="家計簿カテゴリ(大項目/中項目と ID)を表示する")
     c.add_argument("--json", action="store_true", help="JSON で出力する")
     c.set_defaults(handler=_run_categories)
@@ -55,6 +62,24 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     d.add_argument("--month", help="対象行がある月 YYYY-MM(表示中期間にない場合)")
     d.add_argument("--execute", action="store_true", help="実際に削除する")
     d.set_defaults(handler=_run_delete)
+
+
+def _run_summary(args: argparse.Namespace, config: Config) -> int:
+    month = parse_month(args.month) if args.month else None
+    with open_client(config) as client:
+        client.ensure_login()
+        items = client.list_spending_summary(month)
+
+    if args.json:
+        print(json.dumps([dataclasses.asdict(i) for i in items], ensure_ascii=False, indent=2))
+        return 0
+    print(
+        format_table(
+            ["項目", "金額", "割合"],
+            [[i.name if i.is_subtotal else f"  {i.name}", i.amount, i.ratio] for i in items],
+        )
+    )
+    return 0
 
 
 def _run_categories(args: argparse.Namespace, config: Config) -> int:
