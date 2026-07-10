@@ -1,4 +1,4 @@
-"""入出金明細コマンド: transactions、monthly。"""
+"""入出金明細コマンド: transactions、monthly、categories、add、memo、delete。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import json
 from ..config import Config
 from ..http_client import open_client
 from ..models import Transaction
-from ._util import format_table, parse_month, today_jst
+from ._util import format_table, parse_date, parse_month, today_jst
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -23,6 +23,103 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     m = subparsers.add_parser("monthly", help="月次収支リスト(カテゴリ別 × 月別)を表示する")
     m.add_argument("--json", action="store_true", help="JSON で出力する")
     m.set_defaults(handler=_run_monthly)
+
+    c = subparsers.add_parser("categories", help="家計簿カテゴリ(大項目/中項目と ID)を表示する")
+    c.add_argument("--json", action="store_true", help="JSON で出力する")
+    c.set_defaults(handler=_run_categories)
+
+    a = subparsers.add_parser(
+        "add", help="家計簿明細を手入力する。既定は dry-run、実行は --execute"
+    )
+    a.add_argument("--date", help="日付 YYYY-MM-DD(既定: 今日)")
+    a.add_argument("--amount", type=int, required=True, help="金額(正の整数)")
+    a.add_argument("--content", default="", help="内容(50 文字まで)")
+    a.add_argument("--income", action="store_true", help="収入として登録する(既定: 支出)")
+    a.add_argument("--large-id", type=int, default=0, help="大項目 ID(既定 0=未分類)")
+    a.add_argument("--middle-id", type=int, default=0, help="中項目 ID(既定 0=未分類)")
+    a.add_argument("--sub-account", default="0", help="sub_account_id_hash(既定 0=口座なし)")
+    a.add_argument("--execute", action="store_true", help="実際に登録する")
+    a.set_defaults(handler=_run_add)
+
+    e = subparsers.add_parser("memo", help="明細のメモを更新する。既定は dry-run、実行は --execute")
+    e.add_argument("transaction_id", help="対象の明細 ID(transactions --json で確認)")
+    e.add_argument("memo", help="新しいメモ(20 文字まで)")
+    e.add_argument("--month", help="対象行がある月 YYYY-MM(表示中期間にない場合)")
+    e.add_argument("--execute", action="store_true", help="実際に更新する")
+    e.set_defaults(handler=_run_memo)
+
+    d = subparsers.add_parser(
+        "delete", help="手入力の明細を削除する。既定は dry-run、実行は --execute"
+    )
+    d.add_argument("transaction_id", help="対象の明細 ID(手入力行のみ削除可)")
+    d.add_argument("--month", help="対象行がある月 YYYY-MM(表示中期間にない場合)")
+    d.add_argument("--execute", action="store_true", help="実際に削除する")
+    d.set_defaults(handler=_run_delete)
+
+
+def _run_categories(args: argparse.Namespace, config: Config) -> int:
+    with open_client(config) as client:
+        client.ensure_login()
+        categories = client.list_categories()
+    if args.json:
+        print(
+            json.dumps(
+                {k: [dataclasses.asdict(c) for c in v] for k, v in categories.items()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+    for key, title in (("income", "収入"), ("expense", "支出")):
+        rows = []
+        for large in categories.get(key, []):
+            rows.append([str(large.category_id), large.name, "", ""])
+            rows.extend(["", "", str(m.category_id), m.name] for m in large.children)
+        print(f"# {title}")
+        print(format_table(["大項目ID", "大項目", "中項目ID", "中項目"], rows))
+        print()
+    return 0
+
+
+def _run_add(args: argparse.Namespace, config: Config) -> int:
+    dry_run = not args.execute or args.dry_run
+    on = parse_date(args.date) if args.date else today_jst()
+    with open_client(config) as client:
+        client.ensure_login()
+        result = client.create_transaction(
+            on=on,
+            amount=args.amount,
+            content=args.content,
+            is_income=args.income,
+            large_category_id=args.large_id,
+            middle_category_id=args.middle_id,
+            sub_account_id_hash=args.sub_account,
+            dry_run=dry_run,
+        )
+    print(result.detail)
+    return 0
+
+
+def _run_memo(args: argparse.Namespace, config: Config) -> int:
+    dry_run = not args.execute or args.dry_run
+    month = parse_month(args.month) if args.month else None
+    with open_client(config) as client:
+        client.ensure_login()
+        result = client.update_transaction_memo(
+            args.transaction_id, args.memo, month=month, dry_run=dry_run
+        )
+    print(result.detail)
+    return 0
+
+
+def _run_delete(args: argparse.Namespace, config: Config) -> int:
+    dry_run = not args.execute or args.dry_run
+    month = parse_month(args.month) if args.month else None
+    with open_client(config) as client:
+        client.ensure_login()
+        result = client.delete_transaction(args.transaction_id, month=month, dry_run=dry_run)
+    print(result.detail)
+    return 0
 
 
 def _run_monthly(args: argparse.Namespace, config: Config) -> int:

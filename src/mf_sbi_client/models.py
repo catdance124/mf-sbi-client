@@ -38,8 +38,9 @@ class AccountDetail:
 
 @dataclass(frozen=True)
 class Transaction:
-    """入出金明細の1行。"""
+    """入出金明細の1行。transaction_id は手入力の編集・削除に使う(取れない行は None)。"""
 
+    transaction_id: str | None
     date: str
     date_iso: str | None
     content: str
@@ -49,6 +50,24 @@ class Transaction:
     category_large: str | None
     category_middle: str | None
     is_transfer: bool
+
+
+@dataclass(frozen=True)
+class Category:
+    """家計簿カテゴリ(大項目とその中項目)。"""
+
+    category_id: int
+    name: str
+    children: list[Category]
+
+
+@dataclass(frozen=True)
+class CfWriteResult:
+    """家計簿の書き込み操作(入力・編集・削除)の結果。"""
+
+    executed: bool
+    dry_run: bool
+    detail: str
 
 
 @dataclass(frozen=True)
