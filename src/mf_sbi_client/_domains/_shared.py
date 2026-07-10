@@ -51,6 +51,11 @@ def parse_cf_detail_table(soup: BeautifulSoup, start: date, end: date) -> list[T
         return None
     result: list[Transaction] = []
     for tr in table.select("tbody tr"):
+        # 行 id は `js-transaction-<id>` 形式(編集・削除フォームの user_asset_act[id] と同値)
+        tr_id = str(tr.get("id") or "")
+        transaction_id = (
+            tr_id.removeprefix("js-transaction-") if tr_id.startswith("js-transaction-") else None
+        )
         date_td = tr.select_one("td.date")
         amount_td = tr.select_one("td.amount")
         content_td = tr.select_one("td.content")
@@ -73,6 +78,7 @@ def parse_cf_detail_table(soup: BeautifulSoup, start: date, end: date) -> list[T
         amount_value = amount_text.replace("(振替)", "").strip()
         result.append(
             Transaction(
+                transaction_id=transaction_id,
                 date=date_text,
                 date_iso=_resolve_iso_date(date_text, start, end),
                 content=content_td.get_text(" ", strip=True),
