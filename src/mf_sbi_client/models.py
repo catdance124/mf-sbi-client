@@ -37,6 +37,20 @@ class Transaction:
 
 
 @dataclass(frozen=True)
+class MonthlySummaryRow:
+    """月次収支リストの1行(収入合計・カテゴリ別・収支合計など)。
+
+    kind はサービス側の行クラス原文(in_sum / in / out_sum / out / total)。
+    amounts は期間開始日ラベル(例 "2026/01/25〜")→ 表示金額の順序付き辞書。
+    """
+
+    label: str
+    kind: str
+    amounts: dict[str, str]
+    amounts_yen: dict[str, int | None]
+
+
+@dataclass(frozen=True)
 class AssetClass:
     """資産内訳(資産クラス単位)。"""
 
