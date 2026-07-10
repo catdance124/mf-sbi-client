@@ -22,6 +22,7 @@ from .errors import (
 from .http_client import MfSbiClient, open_client
 from .models import (
     Account,
+    AccountDetail,
     AssetClass,
     AssetHistoryPoint,
     MonthlyReport,
@@ -37,6 +38,7 @@ __all__ = [
     "BASE_URL",
     "USER_AGENT",
     "Account",
+    "AccountDetail",
     "AccountsError",
     "AnalysisError",
     "AssetClass",

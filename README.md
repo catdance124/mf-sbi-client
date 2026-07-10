@@ -17,6 +17,7 @@ cp .env.example .env   # MF_SBI_EMAIL / MF_SBI_PASSWORD を記入
 ```sh
 uv run mf-sbi login-check                # ログイン確認(セッションをキャッシュ)
 uv run mf-sbi accounts                   # 連携口座の一覧・残高(--json 可)
+uv run mf-sbi account <account_id>       # 口座別詳細(サマリ・内訳・明細、--json 可)
 uv run mf-sbi transactions               # 当月の入出金明細
 uv run mf-sbi transactions --month 2026-05
 uv run mf-sbi transactions --from 2026-04 --to 2026-06 --json
