@@ -9,6 +9,7 @@ from ._domains._core import BASE_URL, USER_AGENT
 from .config import Config
 from .errors import (
     AccountsError,
+    AnalysisError,
     AssetsError,
     CfError,
     ConfigError,
@@ -23,8 +24,10 @@ from .models import (
     Account,
     AssetClass,
     AssetHistoryPoint,
+    MonthlyReport,
     MonthlySummaryRow,
     RefreshResult,
+    ReportCategory,
     Transaction,
 )
 
@@ -35,6 +38,7 @@ __all__ = [
     "USER_AGENT",
     "Account",
     "AccountsError",
+    "AnalysisError",
     "AssetClass",
     "AssetHistoryPoint",
     "AssetsError",
@@ -44,11 +48,13 @@ __all__ = [
     "LoginError",
     "MfSbiClient",
     "MfSbiError",
+    "MonthlyReport",
     "MonthlySummaryRow",
     "NotAuthenticatedError",
     "ParseError",
     "RefreshError",
     "RefreshResult",
+    "ReportCategory",
     "Transaction",
     "open_client",
 ]
