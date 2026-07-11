@@ -1,6 +1,6 @@
 # mf-sbi-client
 
-マネーフォワード for 住信SBIネット銀行(https://ssnb.x.moneyforward.com/)の非公式クライアントライブラリ + CLI。
+[マネーフォワード for 住信SBIネット銀行](https://ssnb.x.moneyforward.com/) の非公式クライアントライブラリ + CLI。
 
 自分のアカウントの入出金明細・口座残高・資産推移を取得し、連携口座の更新(再集計)を実行できます。
 ランタイムは httpx + BeautifulSoup のみで、ブラウザは使いません。
@@ -14,37 +14,63 @@ cp .env.example .env   # MF_SBI_EMAIL / MF_SBI_PASSWORD を記入
 
 ## CLI
 
+`uv run mf-sbi <グループ> <コマンド>` で実行します。グループはサービスの機能区分に対応し、
+詳細は `uv run mf-sbi <グループ> --help` で確認できます。
+
+### 参照系(読み取りのみ)
+
+参照系はすべて `--json` で JSON 出力できます(`auth login-check` を除く)。
+
 ```sh
-uv run mf-sbi login-check                # ログイン確認(セッションをキャッシュ)
-uv run mf-sbi accounts                   # 連携口座の一覧・残高(--json 可)
-uv run mf-sbi account <account_id>       # 口座別詳細(サマリ・内訳・明細、--json 可)
-uv run mf-sbi transactions               # 当月の入出金明細
-uv run mf-sbi transactions --month 2026-05
-uv run mf-sbi transactions --from 2026-04 --to 2026-06 --json
-uv run mf-sbi monthly                    # 月次収支リスト(カテゴリ別 × 月別、--json 可)
-uv run mf-sbi summary                    # 支出内訳(カテゴリ別の金額と割合、--month / --json 可)
-uv run mf-sbi report                     # 月次レポート(最新月。--month 2026-05 / --json 可)
-uv run mf-sbi diagnosis                  # 家計診断(理想の家計との比較、--month / --json 可)
-uv run mf-sbi assets                     # 資産クラスごとの内訳
-uv run mf-sbi asset-history              # 資産推移サマリ(直近日次+月次)
-uv run mf-sbi asset-history --month 2026-06        # 指定月の日次全日分
-uv run mf-sbi asset-history --csv 推移.csv          # CSV 保存(UTF-8 変換、- で標準出力)
-uv run mf-sbi asset-history --month 2026-06 --csv - # 指定月の日次 CSV
-uv run mf-sbi categories                 # 家計簿カテゴリ一覧(ID 確認用)
-uv run mf-sbi add --amount 500 --content コーヒー --large-id 11 --middle-id 43 --execute
-uv run mf-sbi memo <transaction_id> "メモ" --execute   # 明細メモ更新
-uv run mf-sbi delete <transaction_id> --execute        # 手入力明細の削除
-uv run mf-sbi refresh                    # 全口座を口座別更新(dry-run 既定)
-uv run mf-sbi refresh --execute          # 全口座を口座別更新で実行
-uv run mf-sbi refresh --account-id <ID> --execute --wait   # 単一口座の更新+完了待ち
+# 認証
+uv run mf-sbi auth login-check               # ログイン確認(セッションをキャッシュ)
+
+# 連携口座
+uv run mf-sbi account list                   # 一覧・残高
+uv run mf-sbi account show <account_id>      # 口座別詳細(サマリ・内訳・明細)
+
+# 家計簿
+uv run mf-sbi cf transactions                # 入出金明細(既定: 当月)
+uv run mf-sbi cf transactions --month 2026-05
+uv run mf-sbi cf transactions --from 2026-04 --to 2026-06 --json
+uv run mf-sbi cf monthly                     # 月次収支リスト(カテゴリ別 × 月別)
+uv run mf-sbi cf summary                     # 支出内訳(カテゴリ別の金額と割合)
+uv run mf-sbi cf summary --month 2026-05
+uv run mf-sbi cf categories                  # カテゴリ一覧(cf add 用の ID 確認)
+
+# 資産
+uv run mf-sbi asset list                     # 資産クラスごとの内訳
+uv run mf-sbi asset history                  # 推移(直近日次+月次サマリ)
+uv run mf-sbi asset history --month 2026-06  # 指定月の日次全日分
+uv run mf-sbi asset history --csv asset_history.csv    # CSV 保存(UTF-8 変換)
+uv run mf-sbi asset history --month 2026-06 --csv -    # 指定月の日次 CSV を標準出力へ
+
+# 分析
+uv run mf-sbi analysis report                # 月次レポート(既定: 最新月)
+uv run mf-sbi analysis report --month 2026-05
+uv run mf-sbi analysis diagnosis             # 家計診断(理想の家計との比較、既定: 最新月)
+uv run mf-sbi analysis diagnosis --month 2026-05
+```
+
+### 書き込み系
+`--dry-run` を付けると実行せず内容確認のみ
+
+```sh
+# 家計簿
+uv run mf-sbi cf add --amount 500 --content コーヒー --large-id 11 --middle-id 43
+uv run mf-sbi cf add --amount 500 --dry-run              # 登録内容の確認のみ
+uv run mf-sbi cf memo <transaction_id> "メモ"             # 明細メモの更新(20 文字まで)
+uv run mf-sbi cf delete <transaction_id>                 # 手入力明細の削除
+
+# 連携口座
+uv run mf-sbi account refresh                            # 全口座を口座別更新
+uv run mf-sbi account refresh --dry-run                  # 対象口座の確認のみ
+uv run mf-sbi account refresh --account-id <ID> --wait   # 単一口座の更新+完了待ち
 ```
 
 - 「月」はサービス側のユーザー設定の締め日起点の期間です(例: 25日始まりなら
   `--month 2026-05` は 05/25〜06/24)。
-- `refresh` は金融機関への再集計を発生させるため dry-run が既定です。実行・dry-run とも
-  `logs/audit-YYYY-MM.log` に監査記録が残ります。
-- 一括更新エンドポイント(id なし)は無料プランでは受理されるだけで実処理されないため、
-  `refresh` は全連携口座を**口座別更新でループ**します(無料プランで実際に反映される手段)。
+- 書き込み系の実行・dry-run はいずれも `logs/audit-YYYY-MM.log` に監査記録が残ります。
 
 ## ライブラリとして使う
 
@@ -79,8 +105,3 @@ with open_client(Config.from_env()) as client:
 - 各操作のエンドポイント仕様(観測結果)は `docs/specs/` を参照
 - 開発規約は `CLAUDE.md` を参照
 
-## 制約
-
-- 入出金明細の `/cf/csv` エクスポートはプレミアム限定のため使用せず、HTML を解析します
-- 資産推移の CSV はプレミアム制限なし。サマリは日次直近約10日+月次約12ヶ月、
-  `--month` 指定でデータ登録以降の任意の月の日次全日分が取得できます

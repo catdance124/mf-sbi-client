@@ -1,4 +1,4 @@
-"""口座関連コマンド: accounts / account / refresh。"""
+"""連携口座コマンド(account グループ): list / show / refresh。"""
 
 from __future__ import annotations
 
@@ -12,24 +12,24 @@ from ._util import format_table
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    p = subparsers.add_parser("accounts", help="連携口座の一覧と残高を表示する")
+    p = subparsers.add_parser("list", help="連携口座の一覧と残高を表示する")
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run_accounts)
 
-    d = subparsers.add_parser("account", help="口座別詳細(サマリ・内訳・明細)を表示する")
-    d.add_argument("account_id", help="対象の account_id(accounts コマンドで確認)")
+    d = subparsers.add_parser("show", help="口座別詳細(サマリ・内訳・明細)を表示する")
+    d.add_argument("account_id", help="対象の account_id(account list で確認)")
     d.add_argument("--json", action="store_true", help="JSON で出力する")
     d.set_defaults(handler=_run_account_detail)
 
     r = subparsers.add_parser(
         "refresh",
-        help="連携口座の更新(再集計)を実行する。既定は dry-run、実行は --execute",
+        help="連携口座の更新(再集計)を実行する",
     )
     r.add_argument(
         "--account-id",
         help="対象 account_id(未指定なら全連携口座を口座別更新でループ)",
     )
-    r.add_argument("--execute", action="store_true", help="実際に更新を実行する")
+    r.add_argument("--dry-run", action="store_true", help="実行せず更新内容の表示のみ行う")
     r.add_argument("--wait", action="store_true", help="更新完了までポーリングして待つ")
     r.add_argument("--interval", type=float, default=5.0, help="ポーリング間隔秒(既定 5)")
     r.add_argument("--timeout", type=float, default=180.0, help="待機タイムアウト秒(既定 180)")
@@ -99,7 +99,7 @@ def _run_account_detail(args: argparse.Namespace, config: Config) -> int:
 
 
 def _run_refresh(args: argparse.Namespace, config: Config) -> int:
-    dry_run = not args.execute or args.dry_run
+    dry_run = args.dry_run
     with open_client(config) as client:
         client.ensure_login()
         if args.account_id:
