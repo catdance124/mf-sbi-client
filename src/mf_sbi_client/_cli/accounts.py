@@ -102,6 +102,14 @@ def _run_refresh(args: argparse.Namespace, config: Config) -> int:
     dry_run = args.dry_run
     with open_client(config) as client:
         client.ensure_login()
+        # 完了検知は「登録日（最終取得日）の前進」で行うため、更新前の値を記録しておく
+        baseline: dict[str, str] | None = None
+        if args.wait and not dry_run:
+            baseline = {
+                a.name: a.last_updated
+                for a in client.list_accounts()
+                if not args.account_id or a.account_id == args.account_id
+            }
         if args.account_id:
             results = [client.refresh_account(args.account_id, dry_run=dry_run)]
         else:
@@ -111,7 +119,7 @@ def _run_refresh(args: argparse.Namespace, config: Config) -> int:
             print(result.detail)
         if args.wait and not dry_run:
             accounts = client.wait_refresh(
-                account_id=args.account_id, interval=args.interval, timeout=args.timeout
+                baseline=baseline, interval=args.interval, timeout=args.timeout
             )
             print("更新完了:")
             print(

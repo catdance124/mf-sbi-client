@@ -180,22 +180,59 @@ class AccountsMixin(ClientCore):
             self.refresh_account(a.account_id, dry_run=dry_run) for a in targets if a.account_id
         ]
 
+    def refresh_and_wait(
+        self, *, dry_run: bool = True, interval: float = 5.0, timeout: float = 180.0
+    ) -> list[Account]:
+        """全連携口座を更新し、データ反映まで待って最終的な口座一覧を返す。
+
+        更新実行前に各口座の「登録日（最終取得日）」を記録し、その前進を完了条件に
+        待機する(wait_refresh の baseline を参照)。dry-run 時は待機しない。
+        """
+        baseline = {a.name: a.last_updated for a in self.list_accounts()}
+        results = self.refresh_all_accounts(dry_run=dry_run)
+        if dry_run or not any(r.requested for r in results):
+            return self.list_accounts()
+        return self.wait_refresh(baseline=baseline, interval=interval, timeout=timeout)
+
     def wait_refresh(
         self,
         *,
         account_id: str | None = None,
+        baseline: dict[str, str] | None = None,
         interval: float = 5.0,
         timeout: float = 180.0,
     ) -> list[Account]:
-        """更新中の口座がなくなるまでポーリングし、最終的な口座一覧を返す。
+        """更新完了までポーリングし、最終的な口座一覧を返す。
 
+        baseline(口座名 → 更新実行前の「登録日（最終取得日）」)を渡すと、baseline の
+        各口座について「最終取得日時が進む」または「更新中表示が消える」ことを完了条件に
+        する。「更新状態」列はデータ取得完了後も長時間「更新中」のまま残ることがあるため
+        (spec 参照)、更新実行を伴う待機ではこちらを推奨する(refresh_and_wait 参照)。
+        baseline 指定時は account_id を無視し、baseline の口座のみ監視する。
+
+        baseline なしの場合は従来どおり「更新中表示が消えること」を待つ。
         account_id 指定時はその口座のみ監視する(他口座の定時集計に巻き込まれないため)。
         """
         deadline = time.monotonic() + timeout
         last_logged: list[str] | None = None
         while True:
             accounts = self.list_accounts()
-            if account_id:
+            if baseline is not None:
+                by_name = {a.name: a for a in accounts}
+                refreshing = []
+                for name, before in baseline.items():
+                    account = by_name.get(name)
+                    if account is None:
+                        # 更新中は行の表示が変わって拾えないことがあるため「まだ更新中」とみなす
+                        refreshing.append(f"{name}(一覧に見つかりません)")
+                        continue
+                    advanced = account.last_updated != before
+                    still_refreshing = bool(
+                        account.status and any(m in account.status for m in _REFRESHING_MARKERS)
+                    )
+                    if not advanced and still_refreshing:
+                        refreshing.append(name)
+            elif account_id:
                 watched = [a for a in accounts if a.account_id == account_id]
                 # 更新中は行から更新フォームが消え account_id を特定できなくなるため、
                 # 見つからない場合は「まだ更新中」とみなす
