@@ -1,4 +1,4 @@
-"""月次レポートコマンド: report。"""
+"""分析コマンド(analysis グループ): report / diagnosis。"""
 
 from __future__ import annotations
 

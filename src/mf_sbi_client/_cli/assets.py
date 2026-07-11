@@ -1,4 +1,4 @@
-"""資産関連コマンド: assets / asset-history。"""
+"""資産コマンド(asset グループ): list / history。"""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ from ._util import format_table, parse_month
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    p = subparsers.add_parser("assets", help="資産クラスごとの内訳を表示する")
+    p = subparsers.add_parser("list", help="資産クラスごとの内訳を表示する")
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run_assets)
 
     h = subparsers.add_parser(
-        "asset-history",
+        "history",
         help="資産推移を表示する(既定: 直近日次+月次サマリ、--month で指定月の日次全日分)",
     )
     h.add_argument("--month", help="対象月 YYYY-MM(その月の日次データを取得)")

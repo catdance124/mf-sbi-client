@@ -1,4 +1,4 @@
-"""認証関連コマンド。"""
+"""認証コマンド(auth グループ): login-check。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""入出金明細コマンド: transactions、monthly、categories、add、memo、delete。"""
+"""家計簿コマンド(cf グループ): transactions・monthly・summary・categories・add・memo・delete。"""
 
 from __future__ import annotations
 
@@ -35,9 +35,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     c.add_argument("--json", action="store_true", help="JSON で出力する")
     c.set_defaults(handler=_run_categories)
 
-    a = subparsers.add_parser(
-        "add", help="家計簿明細を手入力する。既定は dry-run、実行は --execute"
-    )
+    a = subparsers.add_parser("add", help="家計簿明細を手入力する")
     a.add_argument("--date", help="日付 YYYY-MM-DD(既定: 今日)")
     a.add_argument("--amount", type=int, required=True, help="金額(正の整数)")
     a.add_argument("--content", default="", help="内容(50 文字まで)")
@@ -45,22 +43,20 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     a.add_argument("--large-id", type=int, default=0, help="大項目 ID(既定 0=未分類)")
     a.add_argument("--middle-id", type=int, default=0, help="中項目 ID(既定 0=未分類)")
     a.add_argument("--sub-account", default="0", help="sub_account_id_hash(既定 0=口座なし)")
-    a.add_argument("--execute", action="store_true", help="実際に登録する")
+    a.add_argument("--dry-run", action="store_true", help="登録せず内容の表示のみ行う")
     a.set_defaults(handler=_run_add)
 
-    e = subparsers.add_parser("memo", help="明細のメモを更新する。既定は dry-run、実行は --execute")
-    e.add_argument("transaction_id", help="対象の明細 ID(transactions --json で確認)")
+    e = subparsers.add_parser("memo", help="明細のメモを更新する")
+    e.add_argument("transaction_id", help="対象の明細 ID(cf transactions --json で確認)")
     e.add_argument("memo", help="新しいメモ(20 文字まで)")
     e.add_argument("--month", help="対象行がある月 YYYY-MM(表示中期間にない場合)")
-    e.add_argument("--execute", action="store_true", help="実際に更新する")
+    e.add_argument("--dry-run", action="store_true", help="更新せず内容の表示のみ行う")
     e.set_defaults(handler=_run_memo)
 
-    d = subparsers.add_parser(
-        "delete", help="手入力の明細を削除する。既定は dry-run、実行は --execute"
-    )
+    d = subparsers.add_parser("delete", help="手入力の明細を削除する")
     d.add_argument("transaction_id", help="対象の明細 ID(手入力行のみ削除可)")
     d.add_argument("--month", help="対象行がある月 YYYY-MM(表示中期間にない場合)")
-    d.add_argument("--execute", action="store_true", help="実際に削除する")
+    d.add_argument("--dry-run", action="store_true", help="削除せず内容の表示のみ行う")
     d.set_defaults(handler=_run_delete)
 
 
@@ -107,7 +103,7 @@ def _run_categories(args: argparse.Namespace, config: Config) -> int:
 
 
 def _run_add(args: argparse.Namespace, config: Config) -> int:
-    dry_run = not args.execute or args.dry_run
+    dry_run = args.dry_run
     on = parse_date(args.date) if args.date else today_jst()
     with open_client(config) as client:
         client.ensure_login()
@@ -126,7 +122,7 @@ def _run_add(args: argparse.Namespace, config: Config) -> int:
 
 
 def _run_memo(args: argparse.Namespace, config: Config) -> int:
-    dry_run = not args.execute or args.dry_run
+    dry_run = args.dry_run
     month = parse_month(args.month) if args.month else None
     with open_client(config) as client:
         client.ensure_login()
@@ -138,7 +134,7 @@ def _run_memo(args: argparse.Namespace, config: Config) -> int:
 
 
 def _run_delete(args: argparse.Namespace, config: Config) -> int:
-    dry_run = not args.execute or args.dry_run
+    dry_run = args.dry_run
     month = parse_month(args.month) if args.month else None
     with open_client(config) as client:
         client.ensure_login()
