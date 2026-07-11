@@ -192,6 +192,7 @@ class AccountsMixin(ClientCore):
         account_id 指定時はその口座のみ監視する(他口座の定時集計に巻き込まれないため)。
         """
         deadline = time.monotonic() + timeout
+        last_logged: list[str] | None = None
         while True:
             accounts = self.list_accounts()
             if account_id:
@@ -217,5 +218,10 @@ class AccountsMixin(ClientCore):
                 return accounts
             if time.monotonic() >= deadline:
                 raise RefreshError(f"更新が {timeout} 秒以内に完了しませんでした: {refreshing}")
-            logger.info("更新待ち: %s", ", ".join(refreshing))
+            # 毎ポーリングで INFO を出すと冗長なため、顔ぶれが変わったときだけ INFO にする
+            if refreshing != last_logged:
+                logger.info("更新待ち(%d件): %s", len(refreshing), ", ".join(refreshing))
+                last_logged = refreshing
+            else:
+                logger.debug("更新待ち(%d件)", len(refreshing))
             time.sleep(interval)
