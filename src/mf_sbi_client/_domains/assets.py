@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup
 from ..errors import AssetsError
 from ..models import AssetClass, AssetHistoryPoint
 from ._core import ClientCore
-from ._shared import parse_yen
+from ._shared import parse_header_table, parse_yen
 
 PORTFOLIO_URL = "/bs/portfolio"
 HISTORY_URL = "/bs/history"
@@ -57,6 +57,23 @@ class AssetsMixin(ClientCore):
                 "資産内訳を解析できません。未ログインまたは仕様変更の可能性があります"
             )
         return result
+
+    def get_portfolio_details(self) -> dict[str, list[dict[str, str]]]:
+        """資産クラス別の保有明細テーブルを取得する(セクション要素 id → 行リスト)。
+
+        キーは明細セクションの要素 id(例 ``portfolio_det_eq``)。保有していない
+        資産クラスのセクションはページに出力されないため、結果にも含まれない。
+        値の各行は {ヘッダ文言: セル原文} で、金額の数値化などは消費側で行う。
+        """
+        res = self._authed_get(PORTFOLIO_URL)
+        soup = BeautifulSoup(res.text, "html.parser")
+        sections = soup.select('section[id^="portfolio_det_"]')
+        if not sections:
+            raise AssetsError(
+                "資産内訳の明細セクションが見つかりません。"
+                "未ログインまたは仕様変更の可能性があります"
+            )
+        return {str(sec["id"]): parse_header_table(sec.select_one("table")) for sec in sections}
 
     def get_asset_history(self) -> list[AssetHistoryPoint]:
         """資産推移(日次: 直近約10日 + 月次: 過去約12ヶ月の月末)を取得する。"""

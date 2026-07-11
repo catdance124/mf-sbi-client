@@ -6,6 +6,7 @@ import re
 from datetime import date
 
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from ..models import Transaction
 
@@ -25,6 +26,26 @@ def parse_yen(text: str) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def parse_header_table(table: Tag | None) -> list[dict[str, str]]:
+    """ヘッダ行(th)と各行(td)を {ヘッダ文言: 値} に対応付ける。
+
+    行によってはヘッダ数より多いセルが入る(カードの行頭空セル等)ため右詰めで合わせる。
+    """
+    if table is None:
+        return []
+    headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
+    rows: list[dict[str, str]] = []
+    for tr in table.find_all("tr"):
+        if not isinstance(tr, Tag):
+            continue
+        tds = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
+        if not tds or len(tds) < len(headers):
+            continue
+        aligned = tds[len(tds) - len(headers) :]
+        rows.append(dict(zip(headers, aligned, strict=True)))
+    return rows
 
 
 def parse_period_label(soup: BeautifulSoup) -> tuple[date, date] | None:

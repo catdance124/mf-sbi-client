@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0 (2026-07-11)
+
+### 追加
+
+- `asset detail`: 資産クラス別の保有明細(銘柄ごとの評価損益など)を表示
+- ライブラリ API 追加: `get_portfolio_details()` — `/bs/portfolio` の明細テーブルを
+  セクション要素 id(`portfolio_det_eq` など)ごとに {ヘッダ文言: セル原文} の行リストで返す
+  (内部 API が存在しないことを観測済みのため HTML 解析。docs/specs/assets/portfolio.md 参照)
+
 ## v0.2.0 (2026-07-11)
 
 ### 破壊的変更
