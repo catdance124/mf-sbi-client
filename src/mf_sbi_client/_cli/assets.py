@@ -1,4 +1,4 @@
-"""資産コマンド(asset グループ): list / history。"""
+"""資産コマンド(asset グループ): list / detail / history。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,10 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p = subparsers.add_parser("list", help="資産クラスごとの内訳を表示する")
     p.add_argument("--json", action="store_true", help="JSON で出力する")
     p.set_defaults(handler=_run_assets)
+
+    d = subparsers.add_parser("detail", help="資産クラス別の保有明細を表示する")
+    d.add_argument("--json", action="store_true", help="JSON で出力する")
+    d.set_defaults(handler=_run_detail)
 
     h = subparsers.add_parser(
         "history",
@@ -39,6 +43,23 @@ def _run_assets(args: argparse.Namespace, config: Config) -> int:
         print(json.dumps([dataclasses.asdict(c) for c in classes], ensure_ascii=False, indent=2))
     else:
         print(format_table(["資産クラス", "合計"], [[c.name, c.amount] for c in classes]))
+    return 0
+
+
+def _run_detail(args: argparse.Namespace, config: Config) -> int:
+    with open_client(config) as client:
+        client.ensure_login()
+        details = client.get_portfolio_details()
+    if args.json:
+        print(json.dumps(details, ensure_ascii=False, indent=2))
+        return 0
+    for section_id, rows in details.items():
+        print(f"[{section_id}]")
+        if rows:
+            headers = list(rows[0].keys())
+            print(format_table(headers, [[r.get(h, "") for h in headers] for r in rows]))
+        else:
+            print("(明細なし)")
     return 0
 
 
