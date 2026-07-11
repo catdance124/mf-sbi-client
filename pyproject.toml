@@ -1,6 +1,6 @@
 [project]
 name = "mf-sbi-client"
-version = "0.3.1"
+version = "0.3.2"
 description = "マネーフォワード for 住信SBIネット銀行 の非公式クライアントライブラリ + CLI"
 readme = "README.md"
 requires-python = ">=3.12"
