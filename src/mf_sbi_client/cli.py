@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from collections.abc import Sequence
 
 from ._cli import accounts, analysis, assets, auth, cf
 from .config import Config
 from .errors import MfSbiError
-from .logging_setup import setup_logging
+from .logging_setup import set_audit_profile, setup_logging
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -17,6 +18,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="マネーフォワード for 住信SBIネット銀行 の非公式 CLI",
     )
     parser.add_argument("--verbose", action="store_true", help="DEBUG ログを出力する")
+    parser.add_argument(
+        "--profile",
+        help="複数アカウントを切り替える際のプロファイル名"
+        "(未指定時は環境変数 MF_SBI_PROFILE、それも無ければ従来どおり単一アカウント扱い)",
+    )
     groups = parser.add_subparsers(dest="command", required=True, metavar="グループ")
 
     def add_group(name: str, help_: str) -> argparse._SubParsersAction[argparse.ArgumentParser]:
@@ -32,6 +38,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
     config = Config.from_env()
+    if args.profile:
+        config = dataclasses.replace(config, profile=args.profile)
+    set_audit_profile(config.profile)
     try:
         result: int = args.handler(args, config)
         return result

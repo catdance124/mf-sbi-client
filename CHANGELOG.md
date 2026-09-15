@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.0 (2026-09-16)
+
+### 追加
+
+- `MF_SBI_PROFILE`(環境変数、または CLI `--profile`)で複数アカウントを切り替え可能に。
+  セッション Cookie(`.session/<profile>/cookies.json`)と監査ログ
+  (`logs/<profile>/audit-YYYY-MM.log`)がプロファイルごとに分離される。
+  未指定時は従来どおりの保存先を使う(後方互換)
+
 ## v0.3.2 (2026-07-12)
 
 ### 追加

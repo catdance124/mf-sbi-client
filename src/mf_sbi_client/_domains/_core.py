@@ -35,6 +35,16 @@ SESSION_DIR = Path(".session")
 COOKIES_PATH = SESSION_DIR / "cookies.json"
 
 
+def resolve_cookies_path(profile: str | None) -> Path:
+    """プロファイル名から Cookie キャッシュの保存先を解決する。
+
+    未指定時は従来どおり `.session/cookies.json` を使う(後方互換)。
+    """
+    if profile is None:
+        return COOKIES_PATH
+    return SESSION_DIR / profile / "cookies.json"
+
+
 class ClientCore:
     """セッション管理とログインを担う基底クラス。各ドメイン Mixin が継承する。"""
 
@@ -134,7 +144,7 @@ class ClientCore:
 
     def _save_cookies(self) -> None:
         """セッション Cookie を JSON で保存する(パーミッション 600)。"""
-        self._cookies_path.parent.mkdir(exist_ok=True)
+        self._cookies_path.parent.mkdir(parents=True, exist_ok=True)
         items = [
             {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
             for c in self._http.cookies.jar
