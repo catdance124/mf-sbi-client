@@ -21,6 +21,7 @@ class Config:
     email: str
     password: str
     proxy: str | None = None
+    profile: str | None = None
 
     @classmethod
     def from_env(cls) -> Config:
@@ -34,4 +35,5 @@ class Config:
                 ".env(.env.example 参照)または環境変数に設定してください"
             )
         proxy = os.environ.get("MF_SBI_PROXY", "").strip() or None
-        return cls(email=email, password=password, proxy=proxy)
+        profile = os.environ.get("MF_SBI_PROFILE", "").strip() or None
+        return cls(email=email, password=password, proxy=proxy, profile=profile)

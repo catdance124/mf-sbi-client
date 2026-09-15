@@ -99,6 +99,22 @@ with open_client(Config.from_env()) as client:
 ログインした際の Cookie(`_moneybook_session`)を同ファイルの形式
 (`[{"name", "value", "domain", "path"}]`)で手動配置すれば以降は動作します。
 
+## 複数アカウントの切り替え(プロファイル)
+
+同じリポジトリ・同じインストールのまま、複数の MoneyForward アカウントを切り替えて実行できます。
+`MF_SBI_PROFILE`(環境変数、または `--profile`)にプロファイル名を指定すると、Cookie と監査ログの
+保存先がプロファイルごとに分離されます。
+
+```sh
+MF_SBI_EMAIL=a@example.com MF_SBI_PASSWORD=**** MF_SBI_PROFILE=alice uv run mf-sbi account refresh
+MF_SBI_EMAIL=b@example.com MF_SBI_PASSWORD=**** uv run mf-sbi --profile bob account refresh
+```
+
+- Cookie: `.session/<profile>/cookies.json`
+- 監査ログ: `logs/<profile>/audit-YYYY-MM.log`
+- `--profile` は `MF_SBI_PROFILE` より優先されます
+- 未指定時は従来どおり `.session/cookies.json` / `logs/audit-YYYY-MM.log` を使います(後方互換)
+
 ## 開発
 
 - 品質ゲート: `uv run ruff check src && uv run ruff format --check src && uv run mypy src`
